@@ -1,0 +1,162 @@
+---
+title: "Exploratory Analysis Real Estate Valuation Data Set Data"
+author: "Carlos Hinrichsen"
+date: "June 13$^{th}$, 2019"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+#\fontsize{7}{9}
+#\selectfont
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,cache = TRUE)
+```
+
+# Real Estate Valuation Analysis
+
+## General Information
+
+According to the data set official web page, https://archive.ics.uci.edu/ml/datasets/Real+estate+valuation+data+set, the relevant information about the attributes is:
+
+The inputs are: 
+X1=the transaction date (for example, 2013.250=2013 March, 2013.500=2013 June, etc.), X2=the house age (unit: year), X3=the distance to the nearest MRT station (unit: meter), X4=the number of convenience stores in the living circle on foot (integer), X5=the geographic coordinate, latitude. (unit: degree), X6=the geographic coordinate, longitude. (unit: degree) 
+
+The output is: 
+Y= house price of unit area (10000 New Taiwan Dollar/Ping, where Ping is a local unit, 1 Ping = 3.3 meter squared) 
+
+## Exploratory Analysis
+
+1. Loading the required libraries
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+library(Hmisc)
+library(GGally)
+library(xlsx)
+library(ggmap)
+```
+
+2. Loading the data
+
+First we need to review the raw data set to understand if there are missing values, data type, etc. 
+
+```{r r_read}
+# Select file
+file <- file.choose()
+# Read data as save as object
+datao <- read.xlsx(file,1)
+# Copy data ot manipulation purposes
+data <- datao
+```
+
+```{r r_dim}
+# Dimension and Type
+str(data)
+# Descriptive
+describe(data)
+```
+
+3. Data Transformation
+
+Considering the descriptive statistics, we can see that there are no missing values. The other thing we can notice is that the name is the attributes is too long to manipulate, the house price is not in a well known units and the first column is just an ID that has to be removed. For this, first we will change the name of the attributes and the do tu related unit transformation considering that 1 New Taiwan Dollar is around 0.042 CAD (the new unit will be CAD/mt$^2$. Additionally, we will change the output from numerical to categorical (10 categories, to be discussed) thinking that a good approach for the problem is to be treated as a classification problem.
+
+Once all the transformation are done, the variables of the data set will be:
+
+TD=the transaction date (for example, 2013.250=2013 March, 2013.500=2013 June, etc.), AGE=the house age (unit: year), DIST=the distance to the nearest MRT station (unit: meter), STR=the number of convenience stores in the living circle on foot (integer), LAT=the geographic coordinate, latitude. (unit: degree), LONG=the geographic coordinate, longitude. (unit: degree) 
+
+NPRICE= house price of unit area (CAD/mt$^2$), CPRICE= house price according to 10 categories (A,...,J)
+
+```{r transf}
+# Currency rate NTW/CAD
+cr <- 0.042
+# PING/meter squared
+mt <- 1/3.3
+# Dropping the first column
+data <- data[,-c(1)]
+# Rename variables
+colnames(data) <- c("TD","AGE","DIST","STR","LAT","LONG","PRICE")
+# Changing the unit of house price
+data$NPRICE <- data$PRICE*cr*mt*1000
+# Crreating 10 categories
+CPRICE <- cut(data$NPRICE,breaks = 10,labels = c("A","B","C","D","E","F","G","H","I","J"))
+describe(CPRICE)
+data$CPRICE <- CPRICE
+data <- data[,-c(7)]
+head(data)
+```
+
+4. Data Plotting 
+
+Below it is a matrix that shows all the numeric variables (categorical price is not included). The diagonal of the matrix shows the probability distribution of each variables. The upper triangular part of the matrix shows the relation of all variables (by pairs), with a linear trend. Finally, the lower triangular of the matrix shows the correlation coefficient of all the pairs of variables within the data set.
+
+```{r allvar}
+ggpairs(data[,-c(8)],lower = list(continuous = wrap("cor", alpha = 1,size=3), combo = "box"),upper = list(continuous = wrap("smooth", alpha = 1, size=1, color='blue')))+theme(axis.text = element_text(size = 6))
+```
+
+At a first glance, we can see that TD and AGE don't have clear relation with NPRICE and with the rest of the variables. They are two good candidates to eliminate of the modelling part of this project.
+
+Anyway, the above plot doesn't show how the different house prices are distributed within the rest of the variables. In the following plot it's possible to see this effect
+
+```{r allvar2}
+pairs(data[,-c(8)],lower.panel = NULL,col=data$CPRICE)
+par(oma = c(4, 1, 1, 1))
+par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+plot(0, 0, type = "n", bty = "n", xaxt = "n", yaxt = "n")
+legend("bottom", legend=levels(data$CPRICE), xpd = TRUE, horiz = TRUE, inset = c(0, 
+    0), bty = "n", col = 1:10, pch=1, cex = 1,title="Price Categories")
+```
+
+Overall is difficult to see the differences between the 10 categories. Finally, we will use a map application to show the different variables by location.
+
+5. Geographical Data 
+
+Below is the map that shows the prices of the houses (NPRICE).
+
+```{r map1,message=F}
+qmplot(LONG, LAT, data = data, colour = data$NPRICE,size = I(3), darken = .3,  alpha = I(0.5),main ="Numeric Price by Location")
+```
+
+The problem with that map is that it's difficult to see cluster. Therefore, another map is created below but with the categorical variable CPRICE
+
+```{r map2,message=F}
+qmplot(LONG, LAT, data = data, colour = data$CPRICE,size = I(3), darken = .3,  alpha = I(0.5),main ="Categorical Price by Location")
+```
+
+Developing the map by categories, it's clearer that there are some cluster (or neighborhoods), with houses with similar price range.
+
+The following maps correspond to the rest of the variables by location
+
+```{r map3,message=F}
+qmplot(LONG, LAT, data = data, colour = data$TD,size = I(3), darken = .3,  alpha = I(0.5),main ="Transaction Date by Location")
+```
+
+As expected, the transaction date has nothing to do with the location.
+
+```{r map4,message=F}
+qmplot(LONG, LAT, data = data, colour = data$AGE,size = I(3), darken = .3,  alpha = I(0.5),main ="House Age by Location")
+```
+
+Additionally, there are some spots with houses with similar ages.
+
+```{r map5,message=F}
+qmplot(LONG, LAT, data = data, colour = data$DIST,size = I(3), darken = .3,  alpha = I(0.5),main ="Distance to the nearest MRT station by Location")
+```
+
+As expected, the distance to the nearest MRT station is related with the location.
+
+```{r map6,message=F}
+qmplot(LONG, LAT, data = data, colour = data$STR,size = I(3), darken = .3,  alpha = I(0.5),main ="Number of convenience stores by Location")
+```
+
+```{r map7,message=F}
+qmplot(LONG, LAT, data = data,alpha=I(0))
+```
+
+Similar as previous one, the number of convenice stores is related with the location.
+
+6. Prediction Analysis
+
+We are working for you...
